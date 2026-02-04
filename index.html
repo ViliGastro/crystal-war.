@@ -54,6 +54,7 @@ body { background: url('background.png') center/cover no-repeat; }
   font-size:6.5vw; max-font-size:36px;
   transition: transform 0.25s ease;
   user-select:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  pointer-events: none; /* tu je fix pre klikanie priamo na figúrku */
 }
 .white-piece { color:#fff; text-shadow:0 0 6px rgba(0,0,0,0.7);}
 .black-piece { color:#000; text-shadow:0 0 4px rgba(255,255,255,0.6);}
@@ -132,7 +133,7 @@ const startingBoard=[
   ["","","","","","","",""],
   ["","","","","","","",""],
   ["","","","","","","",""],
-  ["","","","","","","",""],
+  ["","","","","",""],
   ["P","P","P","P","P","P","P","P"],
   ["R","N","B","Q","K","B","N","R"]
 ];
