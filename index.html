@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mobilné šachy – Crystal War</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; touch-action: manipulation; }
+html, body {
+  width:100%; height:100%; font-family:system-ui,sans-serif;
+  display:flex; justify-content:center; align-items:center; background:#111;
+}
+body { background: url('background.png') center/cover no-repeat; }
+
+#introScreen {
+  position:absolute; top:0; left:0; width:100%; height:100%; display:flex;
+  flex-direction:column; justify-content:center; align-items:center; background:rgba(0,0,0,0.7); color:white; text-align:center;
+  padding:20px; z-index:10;
+}
+#introScreen h1 {
+  font-size:8vw; text-shadow: 0 0 15px #0ff, 0 0 30px #0ff, 0 0 45px #0ff;
+  margin-bottom:16px;
+}
+#introScreen p {
+  font-size:3.5vw; line-height:1.4; margin-bottom:24px; max-width:90%;
+}
+#introScreen button {
+  font-size:4vw; padding:8px 20px; border:none; border-radius:6px; background:#0ff; color:#111;
+  cursor:pointer; transition:0.2s; text-shadow:0 0 6px #000;
+}
+#introScreen button:hover { background:#0cc; }
+
+#app {
+  width:100%; max-width:420px; display:flex; flex-direction:column; align-items:center; padding:10px;
+  display:none; background:rgba(0,0,0,0.7); border-radius:10px;
+}
+
+#status {
+  font-size:18px; margin:6px 0; text-align:center;
+  color:#fff; text-shadow:0 0 6px #0ff;
+}
+
+#board {
+  display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);
+  width:100%; aspect-ratio:1/1; border:3px solid #0ff; border-radius:6px; box-shadow:0 0 12px #0ff; position:relative; margin:8px 0;
+}
+
+.square { display:flex; justify-content:center; align-items:center; transition: background 0.25s ease; position:relative; }
+.light { background:#7E7B52; }
+.dark { background:#2F3234; }
+.selected-square { background:#FF4444 !important; }
+
+.piece {
+  font-size:6.5vw; max-font-size:36px;
+  transition: transform 0.25s ease;
+  user-select:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+}
+.white-piece { color:#fff; text-shadow:0 0 6px rgba(0,0,0,0.7);}
+.black-piece { color:#000; text-shadow:0 0 4px rgba(255,255,255,0.6);}
+
+.captured { min-height:40px; display:flex; flex-wrap:wrap; justify-content:center; font-size:22px; margin:4px 0;
+  color:#0ff; text-shadow:0 0 6px #0ff;}
+
+.controls { display:flex; justify-content:center; gap:8px; margin:4px 0; flex-wrap:wrap;}
+button.game-btn { 
+  padding:6px 12px; font-size:14px; border:none; border-radius:4px; 
+  background:#0ff; color:#111; cursor:pointer; transition:0.2s; text-shadow:0 0 6px #000;
+}
+button.game-btn:hover { background:#0cc; }
+
+/* Tlačidlo spustenia hudby */
+#musicBtn {
+  position:fixed; top:10px; right:10px; z-index:20;
+  font-size:24px; padding:6px 10px; border-radius:6px;
+  border:none; background:rgba(0,255,255,0.6); color:#111;
+  cursor:pointer; text-shadow:0 0 4px #000; transition:0.2s;
+}
+#musicBtn:hover { background:rgba(0,204,204,0.6); }
+</style>
+</head>
+<body>
+
+<div id="introScreen">
+  <h1>Vitajte v Hre Crystal War</h1>
+  <p>
+    Šach nie je len hra, ale vojna mysle. 
+    Každý ťah je rozhodnutím a každá figura je vojakom na bojisku. 
+    "Šach mat neznamená porazenie, ale umenie víťaziť." 
+    Pamätajte, že "Každý veľký hráč raz začínal ako pešiak." 
+    Využite svoju stratégiu a uvidíte, ako sa svet mení pod vašimi rukami.
+  </p>
+  <button id="startBtn">Start Game (Player vs Player)</button>
+</div>
+
+<div id="app">
+  <div id="board"></div>
+  <div id="status">Na ťahu: Biely</div>
+  <div class="controls">
+    <button id="undoBtn" class="game-btn">Krok späť</button>
+    <button id="redoBtn" class="game-btn">Krok dopredu</button>
+    <button id="newBtn" class="game-btn">Nová hra</button>
+  </div>
+  <div id="capturedBlack" class="captured"></div>
+  <div id="capturedWhite" class="captured"></div>
+</div>
+
+<!-- Hudba pozadia -->
+<audio id="bgMusic" src="hudba.mp3" loop></audio>
+<button id="musicBtn">🎵</button>
+
+<script>
+const introScreen = document.getElementById("introScreen");
+const startBtn = document.getElementById("startBtn");
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+const capWhite = document.getElementById("capturedWhite");
+const capBlack = document.getElementById("capturedBlack");
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
+const newBtn = document.getElementById("newBtn");
+
+const musicBtn = document.getElementById("musicBtn");
+const bgMusic = document.getElementById("bgMusic");
+
+const piecesUnicode = { r:"♜", n:"♞", b:"♝", q:"♛", k:"♚", p:"♟", R:"♖", N:"♘", B:"♗", Q:"♕", K:"♔", P:"♙" };
+
+let turn="white", selected=null, board=[], history=[], future=[];
+
+const startingBoard=[
+  ["r","n","b","q","k","b","n","r"],
+  ["p","p","p","p","p","p","p","p"],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["","","","","","","",""],
+  ["P","P","P","P","P","P","P","P"],
+  ["R","N","B","Q","K","B","N","R"]
+];
+
+// Spustenie hry po úvodnej obrazovke
+startBtn.onclick = () => {
+  introScreen.style.display = "none";
+  document.getElementById("app").style.display = "flex";
+  newGame();
+};
+
+// Tlačidlo spustenia hudby
+musicBtn.onclick = () => {
+  bgMusic.play();
+};
+
+// Reset hry
+function newGame(){
+  board=JSON.parse(JSON.stringify(startingBoard));
+  turn="white";
+  selected=null;
+  history=[]; future=[];
+  capWhite.textContent=""; capBlack.textContent="";
+  statusEl.textContent="Na ťahu: Biely";
+  drawBoard();
+}
+
+// Vypočítanie pozície políčka
+function getSquarePos(x,y){
+  const rect=boardEl.getBoundingClientRect();
+  const size=rect.width/8;
+  return {left:x*size+size/2, top:y*size+size/2};
+}
+
+// Vykreslenie dosky a figúr
+function drawBoard(){
+  boardEl.innerHTML="";
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const sq=document.createElement("div");
+      sq.className="square "+((x+y)%2?"dark":"light");
+      sq.dataset.x=x; sq.dataset.y=y;
+      sq.onclick=()=>tapSquare(x,y);
+      if(selected && selected.x===x && selected.y===y) sq.classList.add("selected-square");
+      boardEl.appendChild(sq);
+    }
+  }
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p=board[y][x]; if(!p) continue;
+      const span=document.createElement("div");
+      span.className="piece "+(p===p.toUpperCase()?"white-piece":"black-piece");
+      span.textContent=piecesUnicode[p];
+      const pos=getSquarePos(x,y);
+      span.style.left=pos.left+"px";
+      span.style.top=pos.top+"px";
+      boardEl.appendChild(span);
+    }
+  }
+}
+
+// Undo / Redo
+function saveHistory(){ history.push({board:JSON.parse(JSON.stringify(board)), turn}); future=[]; }
+function undo(){ if(history.length===0)return; future.push({board:JSON.parse(JSON.stringify(board)), turn}); const last=history.pop(); board=JSON.parse(JSON.stringify(last.board)); turn=last.turn; statusEl.textContent="Na ťahu: "+(turn==="white"?"Biely":"Čierny"); drawBoard(); }
+function redo(){ if(future.length===0)return; history.push({board:JSON.parse(JSON.stringify(board)), turn}); const next=future.pop(); board=JSON.parse(JSON.stringify(next.board)); turn=next.turn; statusEl.textContent="Na ťahu: "+(turn==="white"?"Biely":"Čierny"); drawBoard(); }
+
+// Validácia ťahu
+function validMove(sx,sy,dx,dy){
+  const p=board[sy][sx]; if(!p)return false; const target=board[dy][dx]; if(target&&(target===target.toUpperCase())===(p===p.toUpperCase())) return false; return true;
+}
+
+// Kliknutie na políčko
+function tapSquare(x,y){
+  const piece=board[y][x];
+  if(selected){
+    if(validMove(selected.x,selected.y,x,y)){
+      saveHistory();
+      if(piece) capture(piece);
+      board[y][x]=board[selected.y][selected.x];
+      board[selected.y][selected.x]="";
+
+      if(board[y][x]==="P" && y===0) board[y][x]="Q";
+      if(board[y][x]==="p" && y===7) board[y][x]="q";
+
+      turn=turn==="white"?"black":"white";
+      statusEl.textContent="Na ťahu: "+(turn==="white"?"Biely":"Čierny");
+    }
+    selected=null;
+    drawBoard();
+    return;
+  }
+  if(!piece) return;
+  const isWhite=piece===piece.toUpperCase();
+  if((isWhite && turn==="white") || (!isWhite && turn==="black")) selected={x,y};
+  drawBoard();
+}
+
+// Vyhodené figúrky
+function capture(p){ if(p===p.toUpperCase()) capWhite.textContent+=piecesUnicode[p]; else capBlack.textContent+=piecesUnicode[p]; }
+
+// Tlačidlá
+undoBtn.onclick=undo; redoBtn.onclick=redo; newBtn.onclick=newGame;
+</script>
+
+</body>
+</html>
